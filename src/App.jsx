@@ -1,44 +1,31 @@
 import React, { useState } from 'react';
 import { AlertCircle, MapPin, Users, Bell, Activity, LogOut } from 'lucide-react';
+import { useAppContext } from './AppContext';
+import RequestHelp from './RequestHelp';
 
-const CrisisResponseApp = () => {
-  const [currentUser, setCurrentUser] = useState({
-    id: 'USR-001',
-    name: 'John Doe',
-    role: 'CIVILIAN',
-    email: 'john.doe@email.com'
-  });
+const App = () => {
+  const { currentUser, setCurrentUser, getStatistics, alerts, helpRequests } = useAppContext();
+  const [currentScreen, setCurrentScreen] = useState('dashboard');
+  
+  const dashboardStats = getStatistics();
 
-  // Mock data for dashboard
-  const dashboardStats = {
-    CIVILIAN: {
-      activeRequests: 2,
-      nearbyResources: 8,
-      unreadAlerts: 3
-    },
-    RESPONDER: {
-      assignedRequests: 5,
-      completedToday: 12,
-      activeAlerts: 2
-    },
-    ADMINISTRATOR: {
-      totalRequests: 147,
-      activeResponders: 23,
-      resourcesAvailable: 45,
-      alertsSent: 8
-    },
-    RESOURCE_PROVIDER: {
-      totalResources: 4,
-      activeResources: 3,
-      requestsServed: 28
-    }
-  };
+  const recentAlerts = alerts.slice(0, 3).map(alert => ({
+    ...alert,
+    time: getTimeAgo(alert.timestamp)
+  }));
 
-  const recentAlerts = [
-    { id: 'ALT-001', type: 'EMERGENCY', message: 'Severe weather warning - Seek shelter immediately', time: '10 mins ago', urgency: 'CRITICAL' },
-    { id: 'ALT-002', type: 'WARNING', message: 'Road closure on Main St due to flooding', time: '1 hour ago', urgency: 'HIGH' },
-    { id: 'ALT-003', type: 'INFORMATION', message: 'Emergency shelter now open at Community Center', time: '2 hours ago', urgency: 'MEDIUM' }
-  ];
+  function getTimeAgo(timestamp) {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now - then;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${Math.floor(diffHours / 24)} day${Math.floor(diffHours / 24) > 1 ? 's' : ''} ago`;
+  }
 
   const getUrgencyColor = (urgency) => {
     const colors = {
@@ -69,6 +56,16 @@ const CrisisResponseApp = () => {
     };
     return colors[role] || 'bg-gray-600';
   };
+
+  // Handle navigation
+  const handleNavigation = (screen) => {
+    setCurrentScreen(screen);
+  };
+
+  // Render Request Help screen
+  if (currentScreen === 'request-help') {
+    return <RequestHelp onBack={() => setCurrentScreen('dashboard')} />;
+  }
 
   // Render dashboard based on role
   const renderDashboard = () => {
@@ -121,7 +118,10 @@ const CrisisResponseApp = () => {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button className="bg-red-600 hover:bg-red-700 text-white font-semibold py-4 px-6 rounded-lg flex items-center justify-center space-x-2 transition duration-200">
+                <button 
+                  onClick={() => handleNavigation('request-help')}
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-4 px-6 rounded-lg flex items-center justify-center space-x-2 transition duration-200"
+                >
                   <AlertCircle className="w-5 h-5" />
                   <span>Request Help</span>
                 </button>
@@ -137,6 +137,43 @@ const CrisisResponseApp = () => {
                   <Bell className="w-5 h-5" />
                   <span>View All Alerts</span>
                 </button>
+              </div>
+            </div>
+
+            {/* My Active Requests */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">My Active Requests</h2>
+              <div className="space-y-3">
+                {helpRequests
+                  .filter(req => req.civilianId === currentUser.id && req.status !== 'COMPLETED')
+                  .map(request => (
+                    <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                              {request.id}
+                            </span>
+                            <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                              request.status === 'SUBMITTED' ? 'bg-yellow-100 text-yellow-800' :
+                              request.status === 'ASSIGNED' ? 'bg-blue-100 text-blue-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {request.status}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900 mb-1">{request.needType}</p>
+                          <p className="text-sm text-gray-600 mb-2">{request.description}</p>
+                          {request.responderName && (
+                            <p className="text-xs text-gray-500">Assigned to: {request.responderName}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                {helpRequests.filter(req => req.civilianId === currentUser.id && req.status !== 'COMPLETED').length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No active requests</p>
+                )}
               </div>
             </div>
 
@@ -205,6 +242,42 @@ const CrisisResponseApp = () => {
               </div>
             </div>
 
+            {/* Assigned Requests */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">My Assigned Requests</h2>
+              <div className="space-y-3">
+                {helpRequests
+                  .filter(req => req.responderId === currentUser.id && ['ASSIGNED', 'IN_PROGRESS'].includes(req.status))
+                  .map(request => (
+                    <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                              {request.id}
+                            </span>
+                            <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                              request.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                              request.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {request.priority}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900 mb-1">{request.needType}</p>
+                          <p className="text-sm text-gray-600 mb-2">{request.description}</p>
+                          <p className="text-xs text-gray-500">Requester: {request.civilianName}</p>
+                          <p className="text-xs text-gray-500">Location: {request.location.address}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                {helpRequests.filter(req => req.responderId === currentUser.id && ['ASSIGNED', 'IN_PROGRESS'].includes(req.status)).length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No assigned requests</p>
+                )}
+              </div>
+            </div>
+
             {/* Quick Actions */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
@@ -225,27 +298,6 @@ const CrisisResponseApp = () => {
                   <Bell className="w-5 h-5" />
                   <span>View Alerts</span>
                 </button>
-              </div>
-            </div>
-
-            {/* Recent Alerts */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Active Alerts</h2>
-              <div className="space-y-3">
-                {recentAlerts.slice(0, 2).map(alert => (
-                  <div key={alert.id} className={`border-l-4 p-4 rounded ${getUrgencyColor(alert.urgency)}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-xs font-semibold uppercase">{alert.type}</span>
-                          <span className="text-xs text-gray-600">• {alert.time}</span>
-                        </div>
-                        <p className="text-sm font-medium">{alert.message}</p>
-                      </div>
-                      <Bell className="w-5 h-5 ml-4 flex-shrink-0" />
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
@@ -496,4 +548,4 @@ const CrisisResponseApp = () => {
   );
 };
 
-export default CrisisResponseApp;
+export default App;
